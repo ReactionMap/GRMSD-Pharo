@@ -225,6 +225,7 @@ GRMSD >> similarityMatrixFrom: aCollectionOfJunMoleculeGeometry [
 				 arguments: { 
 						 self mainScriptBasename.
 						 inputFile basename.
+						 inputFile basename.
 						 outputFile basename };
 				 runAndWait;
 				 isSuccess) ifFalse: [ ^ Array new ].
@@ -243,4 +244,79 @@ GRMSD >> similarityMatrixFrom: aCollectionOfJunMoleculeGeometry [
 								   Float readFrom: string ]) ] ] ] ] ] ensure: [ 
 			inputFile ensureDelete.
 			outputFile ensureDelete ] ]
+]
+
+{ #category : #services }
+GRMSD >> similarityTo: aJunMoleculeGeometry withAll: aCollectionOfJunMoleculeGeometry [
+
+	aCollectionOfJunMoleculeGeometry ifEmpty: [ ^ Array new ].
+	self ensureGRMSD ifNil: [ ^ Array new ].
+	self octavePath ifNil: [ ^ Array new ] ifNotNil: [ :octave | 
+		| queryFile targetFile resultFile |
+		queryFile := self newTemporaryFile.
+		targetFile := self newTemporaryFile.
+		resultFile := self newTemporaryFile.
+		[ 
+		'running GRMSD' displayProgressFrom: 0 to: 1 during: [ :progress | 
+			queryFile writeStreamDo: [ :stream | 
+				| numAtoms |
+				numAtoms := aJunMoleculeGeometry numberOfAtoms.
+				3 timesRepeat: [ 
+					stream
+						nextPutAll: (numAtoms asFloat printShowingDecimalPlaces: 1);
+						nextPut: $, ].
+				stream
+					nextPutAll: numAtoms printString;
+					nextPut: Character lf.
+				aJunMoleculeGeometry atomsDo: [ :atom | 
+					stream
+						nextPutAll: (atom position x printShowingDecimalPlaces: 5);
+						nextPut: $,;
+						nextPutAll: (atom position y printShowingDecimalPlaces: 5);
+						nextPut: $,;
+						nextPutAll: (atom position z printShowingDecimalPlaces: 5);
+						nextPut: $,;
+						nextPutAll: atom number printString;
+						nextPut: Character lf ] ].
+			targetFile writeStreamDo: [ :stream | 
+				| numAtoms |
+				numAtoms := aCollectionOfJunMoleculeGeometry anyOne numberOfAtoms.
+				3 timesRepeat: [ 
+					stream
+						nextPutAll: (numAtoms asFloat printShowingDecimalPlaces: 1);
+						nextPut: $, ].
+				stream
+					nextPutAll: numAtoms printString;
+					nextPut: Character lf.
+				aCollectionOfJunMoleculeGeometry do: [ :geometry | 
+					geometry atomsDo: [ :atom | 
+						stream
+							nextPutAll: (atom position x printShowingDecimalPlaces: 5);
+							nextPut: $,;
+							nextPutAll: (atom position y printShowingDecimalPlaces: 5);
+							nextPut: $,;
+							nextPutAll: (atom position z printShowingDecimalPlaces: 5);
+							nextPut: $,;
+							nextPutAll: atom number printString;
+							nextPut: Character lf ] ] ].
+			progress value: 0.3.
+			(OSSUnixSubprocess new
+				 workingDirectory: self baseDirectory absolutePath fullName;
+				 command: octave absolutePath fullName;
+				 arguments: { 
+						 self mainScriptBasename.
+						 queryFile basename.
+						 targetFile basename.
+						 resultFile basename };
+				 runAndWait;
+				 isSuccess) ifFalse: [ ^ Array new ].
+			progress value: 0.7.
+			^ resultFile readStreamDo: [ :stream | 
+				  progress value: 0.9.
+
+				  (stream nextLine substrings: ',') collect: [ :string | 
+					  Float readFrom: string ] ] ] ] ensure: [ 
+			queryFile ensureDelete.
+			targetFile ensureDelete.
+			resultFile ensureDelete ] ]
 ]
