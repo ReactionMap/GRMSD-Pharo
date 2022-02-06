@@ -1,11 +1,35 @@
 Class {
 	#name : #GRMSD,
 	#superclass : #Object,
-	#instVars : [
-		'octavePath'
+	#classVars : [
+		'OctaveBaseDirectory'
 	],
 	#category : #GRMSD
 }
+
+{ #category : #private }
+GRMSD class >> findOctaveBaseDirectory [
+
+	#( '/usr/local/bin/octave' '/usr/bin/octave' '/opt/homebrew/bin/octave'
+	   '/opt/local/bin/octave' ) do: [ :pathString | 
+		| ref |
+		ref := pathString asFileReference.
+		ref exists ifTrue: [ ^ ref parent parent ] ].
+	^ (UIManager default
+		   chooseExistingFileReference: 'Select the Octave interpreter'
+		   extensions: #( '' 'exe' )
+		   path: FileLocator home
+		   preview: false) ifNotNil: [ :ref | ref parent parent ]
+]
+
+{ #category : #private }
+GRMSD class >> octaveBaseDirectory [
+
+	(OctaveBaseDirectory notNil and: [ OctaveBaseDirectory exists not ]) 
+		ifTrue: [ OctaveBaseDirectory := self findOctaveBaseDirectory ].
+	^ OctaveBaseDirectory ifNil: [ 
+		  OctaveBaseDirectory := self findOctaveBaseDirectory ]
+]
 
 { #category : #accessing }
 GRMSD >> baseDirectory [
@@ -47,8 +71,10 @@ GRMSD >> compileOctfile: aFileReference [
 	^ (OSSUnixSubprocess new
 		   workingDirectory: aFileReference parent absolutePath pathString;
 		   command: self mkoctfilePath absolutePath pathString;
+		   redirectStdout;
+		   redirectStderr;
 		   arguments: { 
-				   '-mex'.
+				   '--mex'.
 				   aFileReference basename };
 		   runAndWait;
 		   isSuccess)
@@ -69,7 +95,11 @@ GRMSD >> defaultOctavePath [
 						  ifEmpty: [ octaveBase / 'mingw64' / 'bin' / 'octave-cli.exe' ]
 						  ifNotEmpty: #max ]
 				  ifFalse: [ octaveBase / 'mingw64' / 'bin' / 'octave-cli.exe' ] ]
-		  ifFalse: [ FileLocator root / 'usr' / 'local' / 'bin' / 'octave' ]
+		  ifFalse: [ 
+			  | path |
+			  path := FileLocator root / 'opt' / 'homebrew' / 'bin' / 'octave'.
+			  path exists ifTrue: [ ^ path ].
+			  ^ FileLocator root / 'usr' / 'local' / 'bin' / 'octave' ]
 ]
 
 { #category : #private }
@@ -89,21 +119,6 @@ GRMSD >> ensureLatestGRMSD [
 		 (self baseDirectory / '.git') isDirectory ])
 		ifTrue: [ self checkoutGRMSD ]
 		ifFalse: [ self cloneGRMSD ]
-]
-
-{ #category : #private }
-GRMSD >> ensureOctavePath [
-
-	| path |
-	(octavePath notNil and: [ octavePath isExecutable ]) ifTrue: [ 
-		^ octavePath ].
-	path := self defaultOctavePath.
-	path isExecutable ifTrue: [ ^ path ].
-	^ UIManager default
-		  chooseExistingFileReference: 'Select the Octave interpreter'
-		  extensions: #( '' 'exe' )
-		  path: FileLocator home
-		  preview: false
 ]
 
 { #category : #accessing }
@@ -144,10 +159,10 @@ GRMSD >> mainScriptFile [
 	^ self baseDirectory / self mainScriptBasename
 ]
 
-{ #category : #private }
+{ #category : #accessing }
 GRMSD >> mkoctfilePath [
 
-	^ self octavePath ifNotNil: [ :path | path parent / 'mkoctfile' ]
+	^ self class octaveBaseDirectory / 'bin' / 'mkoctfile'
 ]
 
 { #category : #private }
@@ -168,16 +183,7 @@ GRMSD >> newTemporaryFile [
 { #category : #accessing }
 GRMSD >> octavePath [
 
-	| path |
-	(octavePath notNil and: [ octavePath isExecutable ]) ifTrue: [ 
-		^ octavePath ].
-	path := self defaultOctavePath.
-	path isExecutable ifTrue: [ ^ octavePath := path ].
-	^ (UIManager default
-		   chooseExistingFileReference: 'Select the Octave interpreter'
-		   extensions: #( '' 'exe' )
-		   path: FileLocator home
-		   preview: false) ifNotNil: [ :ref | octavePath := ref ]
+	^ self class octaveBaseDirectory / 'bin' / 'octave-cli'
 ]
 
 { #category : #private }
